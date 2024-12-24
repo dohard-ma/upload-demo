@@ -14,15 +14,9 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      # 添加构建步骤(如果需要的话)
-      # - name: Build
-      #   run: |
-      #     npm ci
-      #     npm run build
-
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: . # 如果有构建步骤，这里应该指向构建输出目录，比如 ./dist
-          force_orphan: true # 确保干净的部署历史
+          publish_dir: .
+          force_orphan: true
