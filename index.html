@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>图片压缩演示</title>
+    <style>
+        .preview {
+            max-width: 300px;
+            margin: 20px 0;
+        }
+
+        .image-info {
+            margin: 10px 0;
+        }
+
+        .control-panel {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f5f5f5;
+            border-radius: 4px;
+        }
+
+        .control-item {
+            margin: 10px 0;
+        }
+
+        .control-item label {
+            display: inline-block;
+            width: 150px;
+        }
+
+        .control-item input[type="number"] {
+            width: 80px;
+            padding: 5px;
+        }
+
+        .tip {
+            color: #666;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>图片压缩演示</h2>
+
+    <div class="control-panel">
+        <div class="control-item">
+            <label>最大文件大小:</label>
+            <input type="number" id="maxSize" min="0.1" max="10" step="0.1" value="1">
+            <span class="tip">MB (0.1-10)</span>
+        </div>
+        <div class="control-item">
+            <label>压缩质量:</label>
+            <input type="number" id="quality" min="0.1" max="1" step="0.1" value="0.8">
+            <span class="tip">0.1-1.0 (质量越高，文件越大)</span>
+        </div>
+    </div>
+
+    <input type="file" id="file" accept="image/*">
+    <div id="preview"></div>
+
+    <script>
+        /** 压缩图片到指定大小 */
+        function imageCompression(file, options = {}) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.src = URL.createObjectURL(file);
+
+                img.onload = function () {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    const compressionQuality = options?.ratio || 0.9;
+                    const maxSizeMB = options?.maxSizeMB || 3;
+
+                    let width = img.width;
+                    let height = img.height;
+
+                    const maxWidthForSafari = 4096;
+                    const maxHeightForSafari = 4096;
+
+                    if (width > maxWidthForSafari || height > maxHeightForSafari) {
+                        const scale = Math.min(maxWidthForSafari / width, maxHeightForSafari / height);
+                        width = img.width * scale;
+                        height = img.height * scale;
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+
+                    ctx?.drawImage(img, 0, 0, width, height);
+
+                    canvas.toBlob(
+                        function (blob) {
+                            if (blob) {
+                                const compressedFile = new File([blob], file.name, { type: file.type });
+                                if (compressionQuality <= 0.1) {
+                                    resolve(file);
+                                    return;
+                                }
+                                if (compressedFile.size > maxSizeMB * 1024 * 1024) {
+                                    imageCompression(file, { ...options, ratio: compressionQuality - 0.1 }).then((res) => {
+                                        resolve(res);
+                                    });
+                                    return;
+                                }
+                                resolve(compressedFile);
+                            } else {
+                                reject(file);
+                            }
+                        },
+                        'image/jpeg',
+                        compressionQuality,
+                    );
+                };
+            });
+        }
+
+        // 格式化文件大小
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // 创建预览元素
+        function createPreview(file, compressedFile = null) {
+            const container = document.createElement('div');
+            container.className = 'preview';
+
+            const img = document.createElement('img');
+            img.src = URL.createObjectURL(compressedFile || file);
+            img.style.maxWidth = '100%';
+
+            const info = document.createElement('div');
+            info.className = 'image-info';
+            info.innerHTML = `原始大小: ${formatFileSize(file.size)}`;
+
+            if (compressedFile) {
+                info.innerHTML += `<br>压缩后大小: ${formatFileSize(compressedFile.size)}`;
+                info.innerHTML += `<br>压缩率: ${Math.round((1 - compressedFile.size / file.size) * 100)}%`;
+            }
+
+            container.appendChild(img);
+            container.appendChild(info);
+
+            return container;
+        }
+
+        // 压缩并显示图片
+        async function compressAndDisplay(file) {
+            if (!file) return;
+
+            // 获取当前参数值
+            const maxSizeMB = parseFloat(document.getElementById('maxSize').value);
+            const ratio = parseFloat(document.getElementById('quality').value);
+
+            // 验证参数
+            if (maxSizeMB < 0.1 || maxSizeMB > 10 || ratio < 0.1 || ratio > 1) {
+                alert('请输入有效的参数范围！');
+                return;
+            }
+
+            // 清空之前的预览
+            document.getElementById('preview').innerHTML = '';
+
+            try {
+                // 压缩图片
+                const compressedFile = await imageCompression(file, {
+                    maxSizeMB,
+                    ratio
+                });
+
+                // 显示压缩后的预览
+                document.getElementById('preview').appendChild(
+                    createPreview(file, compressedFile)
+                );
+            } catch (error) {
+                console.error('压缩失败:', error);
+                alert('图片压缩失败');
+            }
+        }
+
+        // 监听文件选择
+        let currentFile = null;
+        document.getElementById('file').addEventListener('change', (e) => {
+            currentFile = e.target.files[0];
+            if (currentFile) {
+                compressAndDisplay(currentFile);
+            }
+        });
+
+        // 监听参数变化
+        ['maxSize', 'quality'].forEach(id => {
+            document.getElementById(id).addEventListener('change', () => {
+                if (currentFile) {
+                    compressAndDisplay(currentFile);
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>
